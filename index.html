@@ -479,6 +479,8 @@
       const r = {id:doc.id, ...doc.data()};
       // warehouse sees only admin-created requests (requirement)
       if(currentRole==='warehouse' && r.creatorRole !== 'admin') return;
+        // Hide "Delivered" requests from the Material Request board
+  if (r.status && r.status.toLowerCase() === 'delivered') return
       const proj = projectsMap[r.projectId];
       const materialsText = (r.items||[]).map(i=>`${i.name} × ${i.qty} ${i.unit}`).join('<br>');
       const statusBadge = statusToBadge(r.status);
@@ -655,29 +657,9 @@
       modal.querySelector('#statusSel').value = r.status || 'approved';
       modal.querySelector('#stCancel').addEventListener('click', ()=> modal.remove());
       modal.querySelector('#stSave').addEventListener('click', async ()=>{
-  const val = modal.querySelector('#statusSel').value;
-
-  if (val === 'out for delivery') {
-    if (confirm('Mark as Out for Delivery and remove this request from the list?')) {
-      await requestsColl.doc(r.id).delete(); // Delete document
-      modal.remove();
-      renderRequests();
-      renderDashboard();
-      alert('Request has been marked Out for Delivery and deleted.');
-      return;
-    } else {
-      return;
-    }
-  }
-
-  // otherwise, just update status normally
-  await requestsColl.doc(r.id).update({
-    status: val,
-    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-  });
-  modal.remove();
-  renderRequests();
-  renderDashboard();
+        const val = modal.querySelector('#statusSel').value;
+        await requestsColl.doc(r.id).update({status: val, updatedAt: firebase.firestore.FieldValue.serverTimestamp()});
+        modal.remove(); renderRequests(); renderDashboard();
       });
     })();
   }
@@ -1005,5 +987,6 @@
   </script>
 </body>
 </html>
+
 
 
