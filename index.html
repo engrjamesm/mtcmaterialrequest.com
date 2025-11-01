@@ -1,0 +1,994 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>STP Material Request System — Firebase Edition</title>
+
+  <!-- Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <!-- Acumin Pro is proprietary, so we fallback to system fonts -->
+
+  <!-- flatpickr for date input -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
+  <style>
+    :root{
+      --blue: #2f80ed;
+      --dark-blue: #0b3a66;
+      --grey: #f2f4f8;
+      --muted:#6b7280;
+      --card-bg:white;
+      --radius:12px;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: "Montserrat", "Roboto", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      background: linear-gradient(180deg, #f7fbff 0%, #ffffff 100%);
+      color:#0f1724;
+    }
+    .container{max-width:1200px;margin:28px auto;padding:20px;}
+    .card{background:var(--card-bg);box-shadow:0 6px 18px rgba(12,20,40,0.06);border-radius:var(--radius);padding:18px;margin-bottom:18px;}
+    header.site-header{display:flex;gap:16px;align-items:center;justify-content:space-between;margin-bottom:18px;}
+    .brand{display:flex;gap:12px;align-items:center;}
+    .logo{width:54px;height:54px;border-radius:10px;background:linear-gradient(135deg,var(--blue),var(--dark-blue));display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:20px;}
+    h1{margin:0;font-size:20px}
+    .sub{color:var(--muted);font-size:13px}
+    .top-actions{display:flex;gap:8px;align-items:center}
+    button.btn{background:var(--blue);color:white;border:0;padding:10px 12px;border-radius:10px;font-weight:600;cursor:pointer;box-shadow:0 6px 12px rgba(47,128,237,0.16);}
+    button.btn.ghost{background:transparent;color:var(--dark-blue);border:1px solid rgba(11,58,102,0.08);box-shadow:none;font-weight:600;}
+    .grid{display:grid;gap:16px}
+    .grid.cols-3{grid-template-columns: 1fr 1fr 1fr;}
+    table{width:100%;border-collapse:collapse;font-size:14px}
+    th,td{padding:10px;border-bottom:1px solid rgba(15,23,36,0.06);text-align:left}
+    th{font-weight:700;color:var(--muted);font-size:13px}
+    label{display:block;font-weight:600;margin-bottom:6px;font-size:13px}
+    input[type=text], input[type=number], input[type=date], select, textarea{width:100%;padding:10px;border-radius:10px;border:1px solid #e6eef8;background:#fcfdff;font-size:14px;}
+    .row{display:flex;gap:10px}
+    .col{flex:1}
+    .badge{display:inline-block;padding:6px 8px;border-radius:999px;font-weight:700;font-size:12px}
+    .status-approved{background:#e6f6ee;color:#0d7a3b}
+    .status-prep{background:#fff7e6;color:#a87100}
+    .status-otd{background:#eef3ff;color:#123a8c}
+    .status-delivered{background:#eef2f7;color:#0b3a66}
+    .sidebar{width:260px}
+    .layout{display:flex;gap:20px}
+    .nav{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:12px}
+    .nav button{background:transparent;border:0;padding:10px;text-align:left;border-radius:8px;cursor:pointer}
+    .nav button.active{background:linear-gradient(90deg,var(--blue),var(--dark-blue));color:white}
+    .login-wrapper{min-height:70vh;display:flex;align-items:center;justify-content:center}
+    .login-card{width:420px;padding:28px;border-radius:14px}
+    .muted{color:var(--muted)}
+    .modal-backdrop{position:fixed;inset:0;background:rgba(8,12,20,0.4);display:flex;align-items:center;justify-content:center;z-index:30}
+    .modal{width:880px;max-height:88vh;overflow:auto;border-radius:12px;padding:18px;background:white}
+    .small-btn{padding:6px 8px;border-radius:8px;border:1px solid rgba(11,58,102,0.08);background:transparent;cursor:pointer}
+    footer.small{font-size:13px;color:var(--muted);margin-top:10px;text-align:center}
+    @media(max-width:900px){.layout{flex-direction:column}.sidebar{width:100%}.modal{width:92%}}
+  </style>
+
+  <!-- Firebase (compat for simpler migration) -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+
+  <!-- PDF helpers -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+</head>
+<body>
+  <div class="container" id="app">
+    <header class="site-header card" id="appHeader" style="display:none">
+      <div class="brand">
+        <div class="logo">STP</div>
+        <div><h1>STP Material Request System</h1><div class="sub">Firebase-backed • Blue / Grey theme</div></div>
+      </div>
+      <div class="top-actions">
+        <div class="sub" id="currentUserDisplay">Signed in as —</div>
+        <div style="width:1px;background:rgba(11,58,102,0.06);height:36px;margin:0 8px"></div>
+        <button class="btn ghost" id="btnCalendarOpen">Calendar</button>
+        <button class="btn" id="btnNewRequest">New Request</button>
+        <button class="btn ghost" id="btnOperators">Operators</button>
+        <button class="btn" id="btnLogout">Logout</button>
+      </div>
+    </header>
+
+    <!-- LOGIN -->
+    <div id="loginPage" class="login-wrapper">
+      <div class="card login-card">
+        <h2 style="margin-top:0">Log in</h2>
+        <p class="muted">Sign in with your email and password. Refreshing will keep you logged in.</p>
+        <div style="margin-top:12px">
+          <label>Email</label>
+          <input id="loginUser" type="text" placeholder="you@example.com" />
+        </div>
+        <div style="margin-top:12px">
+          <label>Password</label>
+          <input id="loginPass" type="password" />
+        </div>
+        <div style="margin-top:14px;display:flex;gap:10px">
+          <button class="btn" id="loginBtn">Login</button>
+          <button class="btn ghost" id="btnCreateSampleUsers">Create Test Users</button>
+        </div>
+
+        <hr style="margin:16px 0">
+        <div class="small muted">
+          Admin: <strong>jmonterona.miraga@gmail.com</strong><br>
+          Warehouseman: <strong>marcial.miraga@gmail.com</strong>
+        </div>
+        <div class="small muted" style="margin-top:8px">Note: Enable Email/Password provider in Firebase Authentication and add these users (or use the Create Test Users button).</div>
+      </div>
+    </div>
+
+    <!-- Main app layout -->
+    <div id="mainApp" style="display:none">
+      <div class="layout">
+        <aside class="sidebar">
+          <div class="card nav" id="mainNav">
+            <button data-view="dashboard" class="active">Dashboard</button>
+            <button data-view="projects">Projects</button>
+            <button data-view="materials">Materials</button>
+            <button data-view="requests">Material Requests</button>
+            <button data-view="summary">Summaries</button>
+            <button data-view="settings">Settings</button>
+          </div>
+          <div class="card" style="margin-top:12px">
+            <h4 style="margin:0">Quick Stats</h4>
+            <div style="margin-top:8px" id="quickStats"></div>
+          </div>
+        </aside>
+        <main style="flex:1">
+          <div id="views">
+            <section id="view-dashboard" class="card view">
+              <h3>Dashboard</h3>
+              <div class="grid cols-3" style="margin-top:12px">
+                <div class="card"><h4 style="margin:0">Requests</h4><div class="small" id="dashboardReqCount">0 total</div></div>
+                <div class="card"><h4 style="margin:0">Projects</h4><div class="small" id="dashboardProjCount">0 total</div></div>
+                <div class="card"><h4 style="margin:0">Materials</h4><div class="small" id="dashboardMatCount">0 total</div></div>
+              </div>
+              <div class="card" style="margin-top:12px">
+                <h4 style="margin:0">Recently added requests</h4>
+                <div style="margin-top:10px">
+                  <table id="tblRecent"><thead><tr><th>Control#</th><th>Project</th><th>Requested By</th><th>Status</th><th>Date</th></tr></thead><tbody></tbody></table>
+                </div>
+              </div>
+            </section>
+
+            <section id="view-projects" class="card view" style="display:none">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <h3>Project Database</h3>
+                <div><button class="btn" id="btnAddProject">Add Project</button></div>
+              </div>
+              <div style="margin-top:12px">
+                <table id="tblProjects"><thead><tr><th>Project Name</th><th>Location</th><th>Operator</th><th>Operator No.</th><th>Control# Count</th><th>Actions</th></tr></thead><tbody></tbody></table>
+              </div>
+            </section>
+
+            <section id="view-materials" class="card view" style="display:none">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <h3>Material Database</h3>
+                <div><button class="btn" id="btnAddMaterial">Add Material</button></div>
+              </div>
+              <div style="margin-top:12px">
+                <table id="tblMaterials"><thead><tr><th>Classification</th><th>Material Name</th><th>Specification</th><th>Unit</th><th>Actions</th></tr></thead><tbody></tbody></table>
+              </div>
+            </section>
+
+            <section id="view-requests" class="card view" style="display:none">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <h3>Material Requests</h3>
+                <div><button class="btn" id="btnExportAll">Export All to PDF</button></div>
+              </div>
+              <div style="margin-top:12px">
+                <table id="tblRequests"><thead><tr><th>Control#</th><th>Project</th><th>Materials</th><th>Requested By</th><th>Status</th><th>Deadline</th><th>Actions</th></tr></thead><tbody></tbody></table>
+              </div>
+            </section>
+
+            <section id="view-summary" class="card view" style="display:none">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <h3>Summaries</h3>
+                <div><button class="btn" id="btnGenerateSummary">Generate Request Summary</button></div>
+              </div>
+              <div style="margin-top:12px">
+                <div id="summaryOutput" class="card" style="min-height:120px"></div>
+              </div>
+            </section>
+
+            <section id="view-settings" class="card view" style="display:none">
+              <h3>Settings</h3>
+              <p class="muted">Admin-only settings</p>
+              <div style="margin-top:12px">
+                <button class="btn ghost" id="btnClearData">Clear All Data (danger)</button>
+                <div class="small muted" style="margin-top:8px">Clearing data will remove all collections in Firestore used by this app (projects, materials, requests, operators).</div>
+              </div>
+            </section>
+
+          </div>
+        </main>
+      </div>
+      <footer class="small muted">Built for STP operators • Firebase Edition</footer>
+    </div>
+  </div>
+
+  <div id="modalRoot"></div>
+
+  <script>
+  /*****************************************
+   * Firebase-backed SPA
+   * - Auth: Email/Password
+   * - Firestore: projects, materials, requests, operators
+   * - Roles mapped by email (admin / warehouse)
+   *****************************************/
+
+  // ---------- FIREBASE CONFIG: REPLACE WITH YOUR PROJECT'S CONFIG ----------
+  // Get config from Firebase console -> Project Settings
+  const firebaseConfig = {
+  apiKey: "AIzaSyDlX3YSRQyI3ZezW3uJMrbmShA5eQeine8",
+  authDomain: "material-request-form-e897e.firebaseapp.com",
+  projectId: "material-request-form-e897e",
+  storageBucket: "material-request-form-e897e.firebasestorage.app",
+  messagingSenderId: "524085274797",
+  appId: "1:524085274797:web:d006b6fbb9069f4817fe24",
+  measurementId: "G-121JV2Y9ST"
+  };
+  // -----------------------------------------------------------------------
+
+  // Role map: map the two emails to roles
+  const ROLE_MAP = {
+    "jmonterona.miraga@gmail.com": "admin",
+    "marcial.miraga@gmail.com": "warehouse"
+  };
+
+  // Initialize Firebase
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
+
+  // Keep session persistent
+  auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(console.warn);
+
+  // UI helpers
+  const $ = s => document.querySelector(s);
+  const $$ = s => Array.from(document.querySelectorAll(s));
+  let currentUser = null; // firebase.User
+  let currentRole = null;
+
+  // Views list
+  const views = ['dashboard','projects','materials','requests','summary','settings'];
+
+  function showView(name){
+    views.forEach(v => {
+      const el = document.getElementById('view-' + v);
+      if(el) el.style.display = (v===name) ? 'block' : 'none';
+      const btn = document.querySelector('#mainNav button[data-view="'+v+'"]');
+      if(btn) btn.classList.toggle('active', v===name);
+    });
+    if(name==='dashboard') renderDashboard();
+    if(name==='projects') renderProjects();
+    if(name==='materials') renderMaterials();
+    if(name==='requests') renderRequests();
+    if(name==='summary') renderSummary();
+  }
+
+  // Auth UI
+  $('#loginBtn').addEventListener('click', () => {
+    const email = $('#loginUser').value.trim();
+    const pass = $('#loginPass').value;
+    if(!email || !pass) return alert('Email and password required.');
+    auth.signInWithEmailAndPassword(email, pass).catch(err => alert(err.message));
+  });
+
+  $('#btnLogout').addEventListener('click', () => {
+    if(confirm('Log out?')) auth.signOut();
+  });
+
+  // Option: create test users directly from the client (only for quick testing).
+  // In production, create users via Firebase Console and secure rules.
+  $('#btnCreateSampleUsers').addEventListener('click', async () => {
+    try {
+      // Create users if not exists (requires rules permitting account creation).
+      // If user already exists, this will error; ignore errors to allow continuation.
+      await auth.createUserWithEmailAndPassword('jmonterona.miraga@gmail.com', 'Admin#12345').catch(()=>{});
+      await auth.createUserWithEmailAndPassword('marcial.miraga@gmail.com', 'Warehouse#12345').catch(()=>{});
+      alert('Tried creating sample accounts. If already created, ignore errors. Use the credentials or set passwords in Firebase console.');
+    } catch(e){
+      console.error(e); alert(e.message || 'Could not create users from client. Create them in Firebase console instead.');
+    }
+  });
+
+  // Monitor auth state
+  auth.onAuthStateChanged(async (user) => {
+    if(user){
+      currentUser = user;
+      currentRole = ROLE_MAP[user.email] || 'admin'; // default admin if unknown (adjust in production)
+      $('#currentUserDisplay').innerText = `${user.email} • ${currentRole}`;
+      $('#loginPage').style.display = 'none';
+      $('#mainApp').style.display = 'block';
+      $('#appHeader').style.display = 'flex';
+      applyRoleRestrictions();
+      await initAfterLogin();
+    } else {
+      currentUser = null;
+      currentRole = null;
+      $('#loginPage').style.display = 'flex';
+      $('#mainApp').style.display = 'none';
+      $('#appHeader').style.display = 'none';
+    }
+  });
+
+  // Nav
+  $$('#mainNav button').forEach(b => b.addEventListener('click', ()=> showView(b.dataset.view)));
+
+  // Role restriction UI
+  function applyRoleRestrictions(){
+    if(!currentRole) return;
+    if(currentRole === 'warehouse'){
+      $('#btnAddProject').style.display = 'none';
+      $('#btnAddMaterial').style.display = 'none';
+      $('#btnNewRequest').style.display = 'none';
+      $('#btnClearData').style.display = 'none';
+      $('#mainNav button[data-view="settings"]').style.display = 'none';
+      $('#btnOperators').style.display = 'none';
+    } else {
+      $('#btnAddProject').style.display = '';
+      $('#btnAddMaterial').style.display = '';
+      $('#btnNewRequest').style.display = '';
+      $('#btnClearData').style.display = '';
+      $('#mainNav button[data-view="settings"]').style.display = '';
+      $('#btnOperators').style.display = '';
+    }
+  }
+
+  // Firestore collection refs
+  const projectsColl = db.collection('projects');
+  const materialsColl = db.collection('materials');
+  const requestsColl = db.collection('requests');
+  const operatorsColl = db.collection('operators');
+
+  // Utility
+  function escapeHtml(s){ if(!s) return ''; return (''+s).replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;', "'":'&#39;' }[c])) }
+
+  // ---------- Projects ----------
+  $('#btnAddProject').addEventListener('click', ()=> openProjectModal());
+
+  async function renderProjects(){
+    const snapshot = await projectsColl.orderBy('name').get();
+    const tbody = $('#tblProjects tbody'); tbody.innerHTML = '';
+    snapshot.forEach(doc => {
+      const p = doc.data(); p.id = doc.id;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${escapeHtml(p.name)}</td><td>${escapeHtml(p.location||'')}</td><td>${escapeHtml(p.operatorName||'')}</td><td>${escapeHtml(p.operatorNumber||'')}</td><td class="small">${p.controlCount||0}</td>
+        <td><button class="small-btn" data-act="edit" data-id="${p.id}">Edit</button> <button class="small-btn" data-act="delete" data-id="${p.id}">Delete</button></td>`;
+      tbody.appendChild(tr);
+    });
+    tbody.querySelectorAll('button').forEach(b=>{
+      b.addEventListener('click', async ()=> {
+        const id = b.dataset.id, act=b.dataset.act;
+        if(act==='edit') openProjectModal(id);
+        if(act==='delete'){
+          if(!confirm('Delete project and its requests?')) return;
+          // delete requests associated & project
+          const reqs = await requestsColl.where('projectId','==',id).get();
+          const batch = db.batch();
+          reqs.forEach(r => batch.delete(r.ref));
+          batch.delete(projectsColl.doc(id));
+          await batch.commit();
+          renderProjects(); renderRequests(); renderDashboard();
+        }
+      })
+    });
+  }
+
+  function openProjectModal(id=null){
+    (async ()=>{
+      let project = null;
+      if(id) {
+        const doc = await projectsColl.doc(id).get();
+        if(!doc.exists) return alert('Project not found');
+        project = {id:doc.id, ...doc.data()};
+      }
+      const modal = document.createElement('div'); modal.className='modal-backdrop';
+      modal.innerHTML = `<div class="modal card">
+        <h3>${project ? 'Edit Project' : 'Add Project'}</h3>
+        <div style="display:grid;gap:10px;margin-top:8px">
+          <div class="row"><div class="col"><label>Project Name</label><input id="proj_name" type="text" value="${project ? escapeHtml(project.name) : ''}"></div>
+          <div class="col"><label>Location</label><input id="proj_loc" type="text" value="${project ? escapeHtml(project.location) : ''}"></div></div>
+          <div class="row"><div class="col"><label>Operator Name</label><input id="proj_op" type="text" value="${project ? escapeHtml(project.operatorName) : ''}"></div>
+          <div class="col"><label>Operator Number</label><input id="proj_opno" type="text" value="${project ? escapeHtml(project.operatorNumber) : ''}"></div></div>
+          <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">
+            <button class="btn ghost" id="projCancel">Cancel</button>
+            <button class="btn" id="projSave">${project ? 'Save Changes' : 'Create Project'}</button>
+          </div>
+        </div></div>`;
+      document.getElementById('modalRoot').appendChild(modal);
+      modal.querySelector('#projCancel').addEventListener('click', ()=> modal.remove());
+      modal.querySelector('#projSave').addEventListener('click', async ()=>{
+        const name = modal.querySelector('#proj_name').value.trim();
+        if(!name) return alert('Project name required');
+        const loc = modal.querySelector('#proj_loc').value.trim();
+        const op = modal.querySelector('#proj_op').value.trim();
+        const opno = modal.querySelector('#proj_opno').value.trim();
+        if(project){
+          await projectsColl.doc(project.id).update({name, location:loc, operatorName:op, operatorNumber:opno});
+        } else {
+          await projectsColl.add({name, location:loc, operatorName:op, operatorNumber:opno, controlCount:0});
+        }
+        modal.remove(); renderProjects(); renderDashboard();
+      });
+    })();
+  }
+
+  // ---------- Materials ----------
+  $('#btnAddMaterial').addEventListener('click', ()=> openMaterialModal());
+  async function renderMaterials(){
+    const snapshot = await materialsColl.orderBy('classification').get();
+    const tbody = $('#tblMaterials tbody'); tbody.innerHTML = '';
+    snapshot.forEach(doc=>{
+      const m = doc.data(); m.id = doc.id;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${escapeHtml(m.classification)}</td><td>${escapeHtml(m.name)}</td><td>${escapeHtml(m.spec)}</td><td>${escapeHtml(m.unit)}</td>
+        <td><button class="small-btn" data-act="edit" data-id="${m.id}">Edit</button> <button class="small-btn" data-act="delete" data-id="${m.id}">Delete</button></td>`;
+      tbody.appendChild(tr);
+    });
+    tbody.querySelectorAll('button').forEach(b=>{
+      b.addEventListener('click', async ()=> {
+        const id=b.dataset.id, act=b.dataset.act;
+        if(act==='edit') openMaterialModal(id);
+        if(act==='delete'){ if(confirm('Delete material?')){ await materialsColl.doc(id).delete(); renderMaterials(); } }
+      });
+    });
+  }
+  function openMaterialModal(id=null){
+    (async ()=>{
+      let item=null;
+      if(id){
+        const doc = await materialsColl.doc(id).get();
+        if(!doc.exists) return alert('Material not found');
+        item = {id:doc.id, ...doc.data()};
+      }
+      const modal=document.createElement('div'); modal.className='modal-backdrop';
+      modal.innerHTML = `<div class="modal card">
+        <h3>${item ? 'Edit Material' : 'Add Material'}</h3>
+        <div style="display:grid;gap:8px;margin-top:8px">
+          <div class="row"><div class="col"><label>Classification</label><input id="mat_class" type="text" value="${item?escapeHtml(item.classification):''}"></div><div class="col"><label>Unit</label><input id="mat_unit" type="text" value="${item?escapeHtml(item.unit):''}"></div></div>
+          <div class="row" style="margin-top:6px"><div class="col"><label>Material Name</label><input id="mat_name" type="text" value="${item?escapeHtml(item.name):''}"></div><div class="col"><label>Specification</label><input id="mat_spec" type="text" value="${item?escapeHtml(item.spec):''}"></div></div>
+          <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px"><button class="btn ghost" id="matCancel">Cancel</button><button class="btn" id="matSave">${item ? 'Save' : 'Add'}</button></div>
+        </div></div>`;
+      document.getElementById('modalRoot').appendChild(modal);
+      modal.querySelector('#matCancel').addEventListener('click', ()=> modal.remove());
+      modal.querySelector('#matSave').addEventListener('click', async ()=>{
+        const classification = modal.querySelector('#mat_class').value.trim();
+        const unit = modal.querySelector('#mat_unit').value.trim();
+        const name = modal.querySelector('#mat_name').value.trim();
+        const spec = modal.querySelector('#mat_spec').value.trim();
+        if(!name) return alert('Material name required');
+        if(item) await materialsColl.doc(item.id).update({classification, unit, name, spec});
+        else await materialsColl.add({classification, unit, name, spec});
+        modal.remove(); renderMaterials();
+      });
+    })();
+  }
+
+  // ---------- Requests ----------
+  $('#btnNewRequest').addEventListener('click', ()=> {
+    if(currentRole === 'warehouse') return alert('Only admin can create new requests.');
+    openRequestModal();
+  });
+
+  async function renderRequests(){
+    // fetch requests ordered by createdAt desc
+    const snapshot = await requestsColl.orderBy('createdAt','desc').get();
+    const tbody = $('#tblRequests tbody'); tbody.innerHTML = '';
+    const projects = await projectsColl.get();
+    const projectsMap = {}; projects.forEach(d => projectsMap[d.id] = d.data());
+    snapshot.forEach(doc=>{
+      const r = {id:doc.id, ...doc.data()};
+      // warehouse sees only admin-created requests (requirement)
+      if(currentRole==='warehouse' && r.creatorRole !== 'admin') return;
+      const proj = projectsMap[r.projectId];
+      const materialsText = (r.items||[]).map(i=>`${i.name} × ${i.qty} ${i.unit}`).join('<br>');
+      const statusBadge = statusToBadge(r.status);
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${escapeHtml(r.controlNo)}</td><td>${escapeHtml(proj ? proj.name : '')}</td><td>${materialsText}</td><td>${escapeHtml(r.requestedBy)}</td><td>${statusBadge}</td><td>${r.deadline || '-'}</td>
+        <td>
+          <button class="small-btn" data-act="view" data-id="${r.id}">View</button>
+          ${ currentRole==='warehouse' ? `<button class="small-btn" data-act="status" data-id="${r.id}">Update Status</button>` : `<button class="small-btn" data-act="edit" data-id="${r.id}">Edit</button>` }
+          <button class="small-btn" data-act="pdf" data-id="${r.id}">PDF</button>
+        </td>`;
+      tbody.appendChild(tr);
+    });
+
+    tbody.querySelectorAll('button').forEach(b=>{
+      b.addEventListener('click', async ()=>{
+        const id = b.dataset.id; const act=b.dataset.act;
+        if(act==='view' || act==='edit') openRequestModal(id, act==='edit');
+        if(act==='status') openStatusModal(id);
+        if(act==='pdf') exportRequestToPDF(id);
+      });
+    });
+  }
+
+  function statusToBadge(status){
+    if(status==='approved') return `<span class="badge status-approved">Approved</span>`;
+    if(status==='preparation') return `<span class="badge status-prep">Preparation</span>`;
+    if(status==='out for delivery') return `<span class="badge status-otd">Out for Delivery</span>`;
+    if(status==='delivered') return `<span class="badge status-delivered">Delivered</span>`;
+    return `<span class="badge">${escapeHtml(status)}</span>`;
+  }
+
+  async function openRequestModal(id=null, editable=true){
+    const projectsSnap = await projectsColl.orderBy('name').get();
+    const materialsSnap = await materialsColl.orderBy('name').get();
+    const projects = []; projectsSnap.forEach(d=>projects.push({id:d.id, ...d.data()}));
+    const materials = []; materialsSnap.forEach(d=>materials.push({id:d.id, ...d.data()}));
+    let req = null;
+    if(id){
+      const doc = await requestsColl.doc(id).get();
+      if(!doc.exists) return alert('Request not found');
+      req = {id:doc.id, ...doc.data()};
+    }
+    const modal = document.createElement('div'); modal.className='modal-backdrop';
+    modal.innerHTML = `<div class="modal card">
+      <h3>${req ? (editable ? 'Edit Request' : 'View Request') : 'Create Material Request'}</h3>
+      <div style="display:grid;gap:8px;margin-top:8px">
+        <div style="display:flex;gap:10px">
+          <div style="flex:1"><label>Project</label><select id="req_project">${projects.map(p=>`<option value="${p.id}" ${req && req.projectId===p.id ? 'selected' : ''}>${escapeHtml(p.name)}</option>`)}</select></div>
+          <div style="flex:1"><label>Requested By</label><input id="req_by" type="text" value="${req ? escapeHtml(req.requestedBy) : escapeHtml(currentUser.email)}"></div>
+        </div>
+        <div class="row"><div class="col"><label>Deadline</label><input id="req_deadline" type="text" placeholder="Select date"></div><div class="col"><label>Remarks</label><input id="req_remarks" type="text" value="${req?escapeHtml(req.remarks||''):''}"></div></div>
+        <div style="margin-top:6px"><label>Materials (add multiple)</label><div id="reqItemsRoot"></div><div style="margin-top:8px"><button class="btn ghost" id="btnAddItem">+ Add Item</button></div></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">
+          <div class="small muted">Control #: <strong id="controlNoPreview">${req ? escapeHtml(req.controlNo) : '(will be generated)'}</strong></div>
+          <div>
+            <button class="btn ghost" id="reqCancel">Cancel</button>
+            ${ editable ? `<button class="btn" id="reqSave">${req ? 'Save Changes' : 'Create Request'}</button>` : '' }
+            ${ req ? `<button class="btn ghost" id="reqPdf">Download PDF</button>` : '' }
+          </div>
+        </div>
+      </div></div>`;
+    document.getElementById('modalRoot').appendChild(modal);
+    flatpickr(modal.querySelector('#req_deadline'), {dateFormat:'Y-m-d', defaultDate:req && req.deadline ? req.deadline : null});
+
+    const itemsRoot = modal.querySelector('#reqItemsRoot');
+    function addItemRow(item){
+      const el = document.createElement('div'); el.className='card'; el.style.marginBottom='8px';
+      el.innerHTML = `<div class="row">
+          <div class="col"><label>Material Classification & Name</label>
+            <select class="itemMat">${materials.map(m=>`<option data-unit="${m.unit}" value="${m.id}" ${item && item.materialId===m.id ? 'selected':''}>${escapeHtml(m.classification)} • ${escapeHtml(m.name)}</option>`)}</select>
+          </div>
+          <div style="width:120px"><label>Qty</label><input type="number" min="1" value="${item ? item.qty : 1}" class="itemQty"></div>
+          <div style="width:140px"><label>Unit</label><input class="itemUnit" value="${item ? escapeHtml(item.unit) : (materials[0] ? escapeHtml(materials[0].unit) : '')}" readonly></div>
+          <div style="width:60px;display:flex;align-items:flex-end;justify-content:flex-end"><button class="small-btn itemRemove">Remove</button></div>
+        </div>
+        <div style="margin-top:6px"><label>Specification</label><input class="itemSpec" value="${item ? escapeHtml(item.spec || '') : ''}"></div>`;
+      itemsRoot.appendChild(el);
+      const select = el.querySelector('.itemMat');
+      const unitInput = el.querySelector('.itemUnit');
+      select.addEventListener('change', ()=> {
+        const chosen = materials.find(m=>m.id===select.value);
+        unitInput.value = chosen ? chosen.unit : '';
+      });
+      el.querySelector('.itemRemove').addEventListener('click', ()=> el.remove());
+    }
+
+    if(req && req.items && req.items.length>0) req.items.forEach(it => addItemRow({materialId: it.materialId, qty: it.qty, unit: it.unit, spec: it.spec}));
+    else addItemRow();
+
+    modal.querySelector('#btnAddItem').addEventListener('click', (e)=>{ e.preventDefault(); addItemRow(); });
+    modal.querySelector('#reqCancel').addEventListener('click', ()=> modal.remove());
+
+    if(editable){
+      modal.querySelector('#reqSave').addEventListener('click', async ()=>{
+        const projectId = modal.querySelector('#req_project').value;
+        const requestedBy = modal.querySelector('#req_by').value.trim();
+        const deadline = modal.querySelector('#req_deadline').value;
+        const remarks = modal.querySelector('#req_remarks').value.trim();
+        if(!projectId) return alert('Choose a project');
+        const items = Array.from(itemsRoot.querySelectorAll('.card')).map(card=>{
+          const matId = card.querySelector('.itemMat').value;
+          const matDoc = materials.find(m=>m.id===matId);
+          const qty = Number(card.querySelector('.itemQty').value) || 0;
+          const unit = card.querySelector('.itemUnit').value;
+          const spec = card.querySelector('.itemSpec').value;
+          return {materialId: matId, name: matDoc ? matDoc.name : '(unknown)', qty, unit, spec};
+        }).filter(i=>i.qty>0);
+        if(items.length===0) return alert('Add at least one material with qty');
+
+        // If new: run a transaction to increment project's controlCount atomically then create request using that number
+        if(!req){
+          const projectRef = projectsColl.doc(projectId);
+          try {
+            await db.runTransaction(async (tx) => {
+              const projDoc = await tx.get(projectRef);
+              if(!projDoc.exists) throw 'Project not found';
+              const projData = projDoc.data();
+              const next = (projData.controlCount || 0) + 1;
+              tx.update(projectRef, {controlCount: next});
+              // build controlNo
+              const code = (projData.code) ? projData.code : (() => {
+                const words = (projData.name||'').split(/\s+/).slice(0,3);
+                let c = words.map(w=> w[0] ? w[0].toUpperCase() :'').join('');
+                if(c.length<2) c = projData.name ? projData.name.slice(0,3).toUpperCase() : 'PRJ';
+                return c;
+              })();
+              const controlNo = `${code}-${String(next).padStart(4,'0')}`;
+              const newReq = {
+                projectId,
+                items,
+                requestedBy,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                creatorRole: currentRole,
+                creatorEmail: currentUser.email,
+                status: 'approved', // default (you can change)
+                deadline,
+                remarks,
+                controlNo
+              };
+              const newRef = requestsColl.doc();
+              tx.set(newRef, newReq);
+            });
+            modal.remove(); renderRequests(); renderDashboard();
+          } catch(err){ console.error(err); alert('Could not create request: ' + err); }
+        } else {
+          // update existing
+          await requestsColl.doc(req.id).update({projectId, items, requestedBy, deadline, remarks, updatedAt: firebase.firestore.FieldValue.serverTimestamp()});
+          modal.remove(); renderRequests(); renderDashboard();
+        }
+      });
+    }
+
+    // PDF download for this request from inside modal
+    const pdfBtn = modal.querySelector('#reqPdf');
+    if(pdfBtn) pdfBtn.addEventListener('click', ()=> exportRequestToPDF(req.id));
+
+  }
+
+  // ---------- Status modal for warehouse ----------
+  function openStatusModal(id){
+    (async ()=>{
+      const doc = await requestsColl.doc(id).get();
+      if(!doc.exists) return alert('Request not found');
+      const r = {id:doc.id, ...doc.data()};
+      const modal = document.createElement('div'); modal.className='modal-backdrop';
+      modal.innerHTML = `<div class="modal card">
+        <h3>Update Status — ${escapeHtml(r.controlNo)}</h3>
+        <div style="margin-top:12px"><label>Status</label>
+          <select id="statusSel"><option value="approved">Approved</option><option value="preparation">Preparation</option><option value="out for delivery">Out for Delivery</option><option value="delivered">Delivered</option></select>
+          <div style="margin-top:12px;display:flex;justify-content:flex-end;gap:8px"><button class="btn ghost" id="stCancel">Cancel</button><button class="btn" id="stSave">Save</button></div>
+        </div></div>`;
+      document.getElementById('modalRoot').appendChild(modal);
+      modal.querySelector('#statusSel').value = r.status || 'approved';
+      modal.querySelector('#stCancel').addEventListener('click', ()=> modal.remove());
+      modal.querySelector('#stSave').addEventListener('click', async ()=>{
+        const val = modal.querySelector('#statusSel').value;
+        await requestsColl.doc(r.id).update({status: val, updatedAt: firebase.firestore.FieldValue.serverTimestamp()});
+        modal.remove(); renderRequests(); renderDashboard();
+      });
+    })();
+  }
+
+  // ---------- PDF export (single request) ----------
+  async function exportRequestToPDF(id){
+    // fetch request + project + operator
+    const doc = await requestsColl.doc(id).get();
+    if(!doc.exists) return alert('Request not found');
+    const r = {id:doc.id, ...doc.data()};
+    const projDoc = await projectsColl.doc(r.projectId).get();
+    const proj = projDoc.exists ? projDoc.data() : null;
+    // find operator info: prefer project's operatorName/Number; else lookup operators collection for project matching
+    let opName = proj && proj.operatorName ? proj.operatorName : '';
+    let opNumber = proj && proj.operatorNumber ? proj.operatorNumber : '';
+    if(!opName || !opNumber){
+      // try operators collection
+      const opsSnap = await operatorsColl.where('site','==', proj ? proj.name : '').limit(1).get();
+      if(!opsSnap.empty){
+        const o = opsSnap.docs[0].data();
+        opName = o.name || opName;
+        opNumber = o.phone || opNumber;
+      }
+    }
+
+    // build printable DOM
+    const printArea = document.createElement('div');
+    printArea.style.padding='18px';
+    printArea.style.width='800px';
+    printArea.style.background='white';
+    printArea.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center">
+      <div><h2 style="margin:0">Material Request</h2><div class="small muted">${escapeHtml(proj ? proj.name : '')}</div></div>
+      <div style="text-align:right"><strong>Control #: ${escapeHtml(r.controlNo)}</strong><div class="small">Date: ${r.createdAt && r.createdAt.toDate ? r.createdAt.toDate().toLocaleDateString() : ''}</div></div>
+    </div>
+    <hr>
+    <div style="margin-top:8px"><strong>Requested By:</strong> ${escapeHtml(r.requestedBy)}<br>
+    <strong>Deadline:</strong> ${r.deadline || '-'}<br>
+    <strong>Remarks:</strong> ${escapeHtml(r.remarks || '')}</div>
+    <div style="margin-top:8px"><strong>Operator Contact:</strong> ${escapeHtml(opName)} ${opNumber ? '• ' + escapeHtml(opNumber) : ''}</div>
+    <div style="margin-top:12px">
+      <table style="width:100%;border-collapse:collapse">
+        <thead style="background:#f6f8fb"><tr><th style="padding:8px;border:1px solid #eee">No.</th><th style="padding:8px;border:1px solid #eee">Item</th><th style="padding:8px;border:1px solid #eee">Spec</th><th style="padding:8px;border:1px solid #eee">Qty</th><th style="padding:8px;border:1px solid #eee">Unit</th></tr></thead>
+        <tbody>
+          ${ (r.items || []).map((it,i)=>`<tr><td style="padding:8px;border:1px solid #eee;text-align:center">${i+1}</td><td style="padding:8px;border:1px solid #eee">${escapeHtml(it.name)}</td><td style="padding:8px;border:1px solid #eee">${escapeHtml(it.spec||'')}</td><td style="padding:8px;border:1px solid #eee;text-align:center">${it.qty}</td><td style="padding:8px;border:1px solid #eee;text-align:center">${escapeHtml(it.unit)}</td></tr>`).join('') }
+        </tbody>
+      </table>
+    </div>
+    <div style="margin-top:18px" class="small muted">Status: ${escapeHtml(r.status)}</div>
+    `;
+    document.body.appendChild(printArea);
+
+    // render to pdf
+    const canvas = await html2canvas(printArea, {scale:2});
+    const img = canvas.toDataURL('image/png');
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF('p','pt','a4');
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const imgProps = pdf.getImageProperties(img);
+    const ratio = Math.min(pageWidth / imgProps.width, pageHeight / imgProps.height);
+    const imgW = imgProps.width * ratio;
+    const imgH = imgProps.height * ratio;
+    pdf.addImage(img, 'PNG', (pageWidth - imgW)/2, 20, imgW, imgH);
+    pdf.save(`${r.controlNo || 'request'}.pdf`);
+    printArea.remove();
+  }
+
+  // ---------- Export All ----------
+  $('#btnExportAll').addEventListener('click', async ()=>{
+    const snapshot = await requestsColl.orderBy('createdAt','desc').get();
+    if(snapshot.empty) return alert('No requests to export.');
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF('p','pt','a4');
+    let first=true;
+    for(const doc of snapshot.docs){
+      const r = {id:doc.id, ...doc.data()};
+      if(currentRole==='warehouse' && r.creatorRole !== 'admin') continue;
+      // fetch project
+      const projDoc = await projectsColl.doc(r.projectId).get();
+      const proj = projDoc.exists ? projDoc.data() : null;
+      const opName = proj && proj.operatorName ? proj.operatorName : '';
+      const opNumber = proj && proj.operatorNumber ? proj.operatorNumber : '';
+      // build area
+      const area = document.createElement('div'); area.style.padding='18px'; area.style.width='800px'; area.style.background='white';
+      area.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center">
+        <div><h2 style="margin:0">Material Request</h2><div class="small muted">${escapeHtml(proj ? proj.name : '')}</div></div>
+        <div style="text-align:right"><strong>Control #: ${escapeHtml(r.controlNo)}</strong><div class="small">Date: ${r.createdAt && r.createdAt.toDate ? r.createdAt.toDate().toLocaleDateString() : ''}</div></div>
+      </div>
+      <hr>
+      <div style="margin-top:8px"><strong>Requested By:</strong> ${escapeHtml(r.requestedBy)}<br>
+      <strong>Deadline:</strong> ${r.deadline || '-'}<br>
+      <strong>Remarks:</strong> ${escapeHtml(r.remarks || '')}</div>
+      <div style="margin-top:8px"><strong>Operator Contact:</strong> ${escapeHtml(opName)} ${opNumber ? '• ' + escapeHtml(opNumber) : ''}</div>
+      <div style="margin-top:12px">
+        <table style="width:100%;border-collapse:collapse">
+          <thead style="background:#f6f8fb"><tr><th style="padding:8px;border:1px solid #eee">No.</th><th style="padding:8px;border:1px solid #eee">Item</th><th style="padding:8px;border:1px solid #eee">Spec</th><th style="padding:8px;border:1px solid #eee">Qty</th><th style="padding:8px;border:1px solid #eee">Unit</th></tr></thead>
+          <tbody>
+            ${ (r.items || []).map((it,i)=>`<tr><td style="padding:8px;border:1px solid #eee;text-align:center">${i+1}</td><td style="padding:8px;border:1px solid #eee">${escapeHtml(it.name)}</td><td style="padding:8px;border:1px solid #eee">${escapeHtml(it.spec||'')}</td><td style="padding:8px;border:1px solid #eee;text-align:center">${it.qty}</td><td style="padding:8px;border:1px solid #eee;text-align:center">${escapeHtml(it.unit)}</td></tr>`).join('') }
+          </tbody>
+        </table>
+      </div>
+      <div style="margin-top:18px" class="small muted">Status: ${escapeHtml(r.status)}</div>`;
+      document.body.appendChild(area);
+      const canvas = await html2canvas(area, {scale:2});
+      const img = canvas.toDataURL('image/png');
+      if(!first) pdf.addPage();
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const imgProps = pdf.getImageProperties(img);
+      const ratio = Math.min(pageWidth / imgProps.width, pageHeight / imgProps.height);
+      const imgW = imgProps.width * ratio;
+      const imgH = imgProps.height * ratio;
+      pdf.addImage(img, 'PNG', (pageWidth - imgW)/2, 20, imgW, imgH);
+      area.remove();
+      first=false;
+    }
+    pdf.save('all-requests.pdf');
+  });
+
+  // ---------- Operators ----------
+  $('#btnOperators').addEventListener('click', openOperatorsModal);
+  async function openOperatorsModal(){
+    const modal = document.createElement('div'); modal.className='modal-backdrop';
+    modal.innerHTML = `<div class="modal card">
+      <h3>STP Operators</h3>
+      <div style="margin-top:12px" id="opsList"></div>
+      <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end"><button class="btn ghost" id="opsClose">Close</button><button class="btn" id="opsAdd">Add Operator</button></div>
+    </div>`;
+    document.getElementById('modalRoot').appendChild(modal);
+
+    async function refreshList(){
+      const root = modal.querySelector('#opsList');
+      const snap = await operatorsColl.orderBy('name').get();
+      root.innerHTML = '';
+      if(snap.empty) root.innerHTML = '<div class="small muted">No operators yet.</div>';
+      snap.forEach(d=>{
+        const o = {id:d.id, ...d.data()};
+        const el = document.createElement('div'); el.className='card'; el.style.marginBottom='8px';
+        el.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center">
+          <div><strong>${escapeHtml(o.name)}</strong><div class="small muted">${escapeHtml(o.phone)} • ${escapeHtml(o.site)}</div><div class="small" style="margin-top:6px">${escapeHtml(o.summary||'')}</div></div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <button class="small-btn" data-act="edit" data-id="${o.id}">Edit</button>
+            <button class="small-btn" data-act="delete" data-id="${o.id}">Delete</button>
+          </div></div>`;
+        root.appendChild(el);
+      });
+      root.querySelectorAll('button').forEach(b=> b.addEventListener('click', async ()=> {
+        const id=b.dataset.id, act=b.dataset.act;
+        if(act==='edit') openOperatorEdit(id, modal);
+        if(act==='delete'){ if(confirm('Delete operator?')){ await operatorsColl.doc(id).delete(); refreshList(); } }
+      }));
+    }
+    refreshList();
+    modal.querySelector('#opsClose').addEventListener('click', ()=> modal.remove());
+    modal.querySelector('#opsAdd').addEventListener('click', ()=> openOperatorAdd(modal));
+  }
+
+  function openOperatorAdd(parentModal){
+    (async ()=>{
+      const modal = document.createElement('div'); modal.className='modal-backdrop';
+      const projectOptions = (await projectsColl.orderBy('name').get()).docs.map(d=>`<option value="${escapeHtml(d.data().name)}">${escapeHtml(d.data().name)}</option>`).join('');
+      modal.innerHTML = `<div class="modal card">
+        <h3>Add Operator</h3>
+        <div style="display:grid;gap:8px">
+          <label>Name</label><input id="op_name" type="text">
+          <label>Phone</label><input id="op_phone" type="text">
+          <label>Site (Project)</label><select id="op_site">${projectOptions}</select>
+          <label>Summary</label><textarea id="op_summary" rows="3"></textarea>
+          <div style="display:flex;justify-content:flex-end;gap:8px"><button class="btn ghost" id="op_cancel">Cancel</button><button class="btn" id="op_save">Save</button></div>
+        </div></div>`;
+      document.getElementById('modalRoot').appendChild(modal);
+      modal.querySelector('#op_cancel').addEventListener('click', ()=> modal.remove());
+      modal.querySelector('#op_save').addEventListener('click', async ()=>{
+        const name = modal.querySelector('#op_name').value.trim();
+        if(!name) return alert('Name required');
+        const phone = modal.querySelector('#op_phone').value.trim();
+        const site = modal.querySelector('#op_site').value;
+        const summary = modal.querySelector('#op_summary').value.trim();
+        await operatorsColl.add({name, phone, site, summary});
+        modal.remove();
+        parentModal.remove();
+        openOperatorsModal();
+      });
+    })();
+  }
+
+  function openOperatorEdit(id, parentModal){
+    (async ()=>{
+      const doc = await operatorsColl.doc(id).get();
+      if(!doc.exists) return alert('Operator not found');
+      const op = {id:doc.id, ...doc.data()};
+      const projectOptions = (await projectsColl.orderBy('name').get()).docs.map(d=>`<option value="${escapeHtml(d.data().name)}" ${d.data().name===op.site ? 'selected':''}>${escapeHtml(d.data().name)}</option>`).join('');
+      const modal = document.createElement('div'); modal.className='modal-backdrop';
+      modal.innerHTML = `<div class="modal card">
+        <h3>Edit Operator</h3>
+        <div style="display:grid;gap:8px">
+          <label>Name</label><input id="op_name" type="text" value="${escapeHtml(op.name)}">
+          <label>Phone</label><input id="op_phone" type="text" value="${escapeHtml(op.phone)}">
+          <label>Site (Project)</label><select id="op_site">${projectOptions}</select>
+          <label>Summary</label><textarea id="op_summary" rows="3">${escapeHtml(op.summary||'')}</textarea>
+          <div style="display:flex;justify-content:flex-end;gap:8px"><button class="btn ghost" id="op_cancel">Cancel</button><button class="btn" id="op_save">Save</button></div>
+        </div></div>`;
+      document.getElementById('modalRoot').appendChild(modal);
+      modal.querySelector('#op_cancel').addEventListener('click', ()=> modal.remove());
+      modal.querySelector('#op_save').addEventListener('click', async ()=>{
+        const name = modal.querySelector('#op_name').value.trim();
+        const phone = modal.querySelector('#op_phone').value.trim();
+        const site = modal.querySelector('#op_site').value;
+        const summary = modal.querySelector('#op_summary').value.trim();
+        await operatorsColl.doc(id).update({name, phone, site, summary});
+        modal.remove();
+        parentModal.remove();
+        openOperatorsModal();
+      });
+    })();
+  }
+
+  // ---------- Calendar ----------
+  $('#btnCalendarOpen').addEventListener('click', openCalendarModal);
+  async function openCalendarModal(){
+    const snap = await requestsColl.where('deadline','!=','').get();
+    const grouped = {};
+    snap.forEach(d => {
+      const r = d.data();
+      if(!r.deadline) return;
+      grouped[r.deadline] = grouped[r.deadline] || [];
+      grouped[r.deadline].push(r);
+    });
+    const modal = document.createElement('div'); modal.className='modal-backdrop';
+    let content = '<div style="display:flex;gap:12px;align-items:center"><h3>Deadlines Calendar</h3></div>';
+    content += '<div style="margin-top:8px">';
+    if(Object.keys(grouped).length===0) content += '<div class="small muted">No deadlines set.</div>';
+    else {
+      Object.keys(grouped).sort().forEach(d => {
+        content += `<div class="card" style="margin-top:8px"><strong>${escapeHtml(d)}</strong><div class="small" style="margin-top:6px">${grouped[d].map(r=>`${escapeHtml(r.controlNo || '')} • ${escapeHtml(r.requestedBy || '')} • ${escapeHtml(r.status || '')}`).join('<br>')}</div></div>`;
+      });
+    }
+    content += '</div>';
+    modal.innerHTML = `<div class="modal card" style="width:640px;max-height:80vh;overflow:auto">${content}<div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="btn" id="calClose">Close</button></div></div>`;
+    document.getElementById('modalRoot').appendChild(modal);
+    modal.querySelector('#calClose').addEventListener('click', ()=> modal.remove());
+  }
+
+  // ---------- Summaries ----------
+  async function renderSummary(){
+    const out = $('#summaryOutput');
+    const reqSnap = await requestsColl.get();
+    const projSnap = await projectsColl.get();
+    const projectsMap = {}; projSnap.forEach(d=> projectsMap[d.id] = d.data());
+    const perProject = {};
+    reqSnap.forEach(d=>{
+      const r = d.data();
+      const pname = projectsMap[r.projectId] ? projectsMap[r.projectId].name : 'Unknown';
+      perProject[pname] = perProject[pname] || []; perProject[pname].push(r);
+    });
+    const opsSnap = await operatorsColl.get();
+    const ops = []; opsSnap.forEach(d=> ops.push(d.data()));
+    let html = '<h4>Requests per Project</h4>';
+    for(const [pname, arr] of Object.entries(perProject)){
+      html += `<div class="card" style="margin-top:8px"><strong>${escapeHtml(pname)}</strong> — ${arr.length} requests<br>`;
+      html += `<div class="small">Statuses: ${Object.entries(arr.reduce((a,c)=>{ a[c.status]=(a[c.status]||0)+1; return a; },{})).map(([s,n])=>s+': '+n).join(', ')}</div></div>`;
+    }
+    html += `<h4 style="margin-top:12px">Operators</h4>`;
+    if(ops.length===0) html += '<div class="small muted">No operators yet.</div>';
+    else ops.forEach(op => html += `<div class="card" style="margin-top:6px"><strong>${escapeHtml(op.name)}</strong> • ${escapeHtml(op.phone)} • ${escapeHtml(op.site)}<div class="small" style="margin-top:6px">${escapeHtml(op.summary||'')}</div></div>`);
+    out.innerHTML = html;
+  }
+  $('#btnGenerateSummary').addEventListener('click', ()=> { renderSummary(); alert('Summary generated below.'); });
+
+  // ---------- Settings ----------
+  $('#btnClearData').addEventListener('click', async ()=>{
+    if(currentRole !== 'admin') return alert('Only admin can clear data.');
+    if(!confirm('Are you sure? This will delete all documents in projects, materials, requests and operators.')) return;
+    // caution: deletes all docs per collection (limited to ~500 writes per batch)
+    await clearCollection('requests');
+    await clearCollection('projects');
+    await clearCollection('materials');
+    await clearCollection('operators');
+    renderDashboard(); renderProjects(); renderMaterials(); renderRequests();
+    alert('All collections cleared.');
+  });
+
+  async function clearCollection(colName){
+    const snapshot = await db.collection(colName).get();
+    const batch = db.batch();
+    snapshot.forEach(d => batch.delete(d.ref));
+    await batch.commit();
+  }
+
+  // ---------- Dashboard ----------
+  async function renderDashboard(){
+    const reqSnap = await requestsColl.get();
+    const projSnap = await projectsColl.get();
+    const matSnap = await materialsColl.get();
+    $('#dashboardReqCount').innerText = reqSnap.size + ' total';
+    $('#dashboardProjCount').innerText = projSnap.size + ' total';
+    $('#dashboardMatCount').innerText = matSnap.size + ' total';
+
+    const tbody = $('#tblRecent tbody'); tbody.innerHTML = '';
+    const recent = reqSnap.docs.slice(-6).reverse();
+    recent.forEach(d=>{
+      const r = d.data();
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${escapeHtml(r.controlNo)}</td><td>${escapeHtml((projSnap.docs.find(p=>p.id===r.projectId)||{data:()=>({name:''})}).data().name)}</td><td>${escapeHtml(r.requestedBy||'')}</td><td>${escapeHtml(r.status||'')}</td><td>${r.createdAt && r.createdAt.toDate ? r.createdAt.toDate().toLocaleDateString() : ''}</td>`;
+      tbody.appendChild(tr);
+    });
+
+    const q = $('#quickStats'); q.innerHTML = '';
+    const statuses = {};
+    reqSnap.forEach(d=>{ const r=d.data(); statuses[r.status] = (statuses[r.status]||0)+1; });
+    q.innerHTML = `<div class="small">Requests by status: ${Object.entries(statuses).map(([k,v])=>`${k}: ${v}`).join(' • ') || 'None'}</div><div class="small" style="margin-top:6px">Projects: ${projSnap.size}</div>`;
+  }
+
+  // ---------- Init after login ----------
+  async function initAfterLogin(){
+    applyRoleRestrictions();
+    renderDashboard(); renderProjects(); renderMaterials(); renderRequests();
+  }
+
+  // On load, show login if not signed in handled by onAuthStateChanged
+  document.addEventListener('DOMContentLoaded', ()=> {
+    // placeholder
+  });
+
+  </script>
+</body>
+</html>
