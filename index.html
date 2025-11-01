@@ -480,7 +480,7 @@
       // warehouse sees only admin-created requests (requirement)
       if(currentRole==='warehouse' && r.creatorRole !== 'admin') return;
         // Hide "Delivered" requests from the Material Request board
-  if (r.status && r.status.toLowerCase() === 'delivered') return
+  if (r.status && r.status.toLowerCase() === 'delivered') return;
       const proj = projectsMap[r.projectId];
       const materialsText = (r.items||[]).map(i=>`${i.name} × ${i.qty} ${i.unit}`).join('<br>');
       const statusBadge = statusToBadge(r.status);
@@ -987,6 +987,7 @@
   </script>
 </body>
 </html>
+
 
 
 
