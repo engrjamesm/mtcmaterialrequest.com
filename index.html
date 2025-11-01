@@ -485,12 +485,25 @@
       const materialsText = (r.items||[]).map(i=>`${i.name} × ${i.qty} ${i.unit}`).join('<br>');
       const statusBadge = statusToBadge(r.status);
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${escapeHtml(r.controlNo)}</td><td>${escapeHtml(proj ? proj.name : '')}</td><td>${materialsText}</td><td>${escapeHtml(r.requestedBy)}</td><td>${statusBadge}</td><td>${r.deadline || '-'}</td>
-        <td>
-          <button class="small-btn" data-act="view" data-id="${r.id}">View</button>
-          ${ currentRole==='warehouse' ? `<button class="small-btn" data-act="status" data-id="${r.id}">Update Status</button>` : `<button class="small-btn" data-act="edit" data-id="${r.id}">Edit</button>` }
-          <button class="small-btn" data-act="pdf" data-id="${r.id}">PDF</button>
-        </td>`;
+      tr.innerHTML = `
+  <td>${escapeHtml(r.controlNo)}</td>
+  <td>${escapeHtml(proj ? proj.name : '')}</td>
+  <td>${materialsText}</td>
+  <td>${escapeHtml(r.requestedBy)}</td>
+  <td>${statusBadge}</td>
+  <td>${r.deadline || '-'}</td>
+  <td>
+    <button class="small-btn" data-act="view" data-id="${r.id}">View</button>
+    ${
+      currentRole === 'warehouse'
+        ? `<button class="small-btn" data-act="status" data-id="${r.id}">Update Status</button>`
+        : `
+          <button class="small-btn" data-act="edit" data-id="${r.id}">Edit</button>
+          <button class="small-btn" data-act="delete" data-id="${r.id}">Delete</button>
+        `
+    }
+    <button class="small-btn" data-act="pdf" data-id="${r.id}">PDF</button>
+  </td>`;
       tbody.appendChild(tr);
     });
 
@@ -500,6 +513,15 @@
         if(act==='view' || act==='edit') openRequestModal(id, act==='edit');
         if(act==='status') openStatusModal(id);
         if(act==='pdf') exportRequestToPDF(id);
+        if(act==='delete'){
+        if(currentRole !== 'admin') return alert('Only admin can delete requests.');
+        if(confirm('Are you sure you want to permanently delete this request?')){
+        await requestsColl.doc(id).delete();
+        alert('Request permanently deleted.');
+        renderRequests();
+        renderDashboard();
+      }
+    }
       });
     });
   }
@@ -987,6 +1009,7 @@
   </script>
 </body>
 </html>
+
 
 
 
