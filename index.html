@@ -655,9 +655,29 @@
       modal.querySelector('#statusSel').value = r.status || 'approved';
       modal.querySelector('#stCancel').addEventListener('click', ()=> modal.remove());
       modal.querySelector('#stSave').addEventListener('click', async ()=>{
-        const val = modal.querySelector('#statusSel').value;
-        await requestsColl.doc(r.id).update({status: val, updatedAt: firebase.firestore.FieldValue.serverTimestamp()});
-        modal.remove(); renderRequests(); renderDashboard();
+  const val = modal.querySelector('#statusSel').value;
+
+  if (val === 'out for delivery') {
+    if (confirm('Mark as Out for Delivery and remove this request from the list?')) {
+      await requestsColl.doc(r.id).delete(); // Delete document
+      modal.remove();
+      renderRequests();
+      renderDashboard();
+      alert('Request has been marked Out for Delivery and deleted.');
+      return;
+    } else {
+      return;
+    }
+  }
+
+  // otherwise, just update status normally
+  await requestsColl.doc(r.id).update({
+    status: val,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+  modal.remove();
+  renderRequests();
+  renderDashboard();
       });
     })();
   }
@@ -985,4 +1005,5 @@
   </script>
 </body>
 </html>
+
 
